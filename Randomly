@@ -1,0 +1,150 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
+// Item represents a simple data structure.
+type Item struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// In-memory storage for items (replace this with a database in a real application).
+var items = map[string]Item{}
+
+func main() {
+	http.HandleFunc("/items", handleItems)
+	http.HandleFunc("/items/", handleItem)
+
+	port := 8080
+	fmt.Printf("Server is listening on port %d...\n", port)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+	}
+}
+
+func handleItems(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		getItems(w, r)
+	case http.MethodPost:
+		createItem(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleItem(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		getItem(w, r)
+	case http.MethodPut:
+		updateItem(w, r)
+	case http.MethodDelete:
+		deleteItem(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func getItems(w http.ResponseWriter, r *http.Request) {
+	// Convert items map to a slice of Item for JSON serialization.
+	var itemList []Item
+	for _, v := range items {
+		itemList = append(itemList, v)
+	}
+
+	// Serialize items to JSON.
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(itemList)
+}
+
+func getItem(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r.URL.Path)
+
+	// Check if the item with the given ID exists.
+	item, ok := items[id]
+	if !ok {
+		http.Error(w, "Item not found", http.StatusNotFound)
+		return
+	}
+
+	// Serialize item to JSON.
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(item)
+}
+
+func createItem(w http.ResponseWriter, r *http.Request) {
+	// Parse JSON request body to Item struct.
+	var newItem Item
+	err := json.NewDecoder(r.Body).Decode(&newItem)
+	if err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	// Generate a unique ID for the new item.
+	id := generateID()
+	newItem.ID = id
+
+	// Add the new item to the items map.
+	items[id] = newItem
+
+	// Set the Location header to the URL of the new item.
+	w.Header().Set("Location", "/items/"+id)
+	w.WriteHeader(http.StatusCreated)
+}
+
+func updateItem(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r.URL.Path)
+
+	// Check if the item with the given ID exists.
+	_, ok := items[id]
+	if !ok {
+		http.Error(w, "Item not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse JSON request body to Item struct.
+	var updatedItem Item
+	err := json.NewDecoder(r.Body).Decode(&updatedItem)
+	if err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	// Update the item with the new values.
+	items[id] = updatedItem
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteItem(w http.ResponseWriter, r *http.Request) {
+	id := extractID(r.URL.Path)
+
+	// Check if the item with the given ID exists.
+	_, ok := items[id]
+	if !ok {
+		http.Error(w, "Item not found", http.StatusNotFound)
+		return
+	}
+
+	// Delete the item.
+	delete(items, id)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func extractID(path string) string {
+	// Extract the ID from the URL path.
+	return path[len("/items/"):]
+}
+
+func generateID() string {
+	// Generate a simple ID (replace this with a more robust solution in a real application).
+	return fmt.Sprintf("%d", len(items)+1)
+}
